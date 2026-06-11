@@ -79,8 +79,8 @@ try:
         df['Timestamp'] = pd.to_datetime(df['Timestamp'])
         df_recent = df.tail(30) # Focus on trailing 30 evaluations
         
-        # Build canvas with flat white backdrop
-        fig, ax = plt.subplots(figsize=(12, 5.5), facecolor='white')
+        # Build canvas with flat white backdrop - wider for x-axis labels
+        fig, ax = plt.subplots(figsize=(14, 5.5), facecolor='white')
         ax.set_facecolor('white')
         
         # Plot crisp, high-contrast overall index line
@@ -100,10 +100,10 @@ try:
         ax.grid(True, linestyle='--', linewidth=0.5, color='#e5e5e5')
         
         # Format x-axis with French date format dd/MM/YYYY HH:MM with proper minutes display
-        # Use MinuteLocator to show actual minutes
-        ax.xaxis.set_major_locator(mdates.MinuteLocator(interval=15))
+        # Use MinuteLocator to show actual minutes at 30-minute intervals for less crowding
+        ax.xaxis.set_major_locator(mdates.MinuteLocator(interval=30))
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m/%Y\n%H:%M'))
-        plt.xticks(rotation=0, ha='center', fontsize=8)
+        plt.xticks(rotation=45, ha='right', fontsize=7)
         
         # Add legend with subtle styling placed outside the plot area
         legend = ax.legend(loc='upper left', fontsize=8, framealpha=0.95, edgecolor='#cccccc', facecolor='white', bbox_to_anchor=(1.02, 1))
