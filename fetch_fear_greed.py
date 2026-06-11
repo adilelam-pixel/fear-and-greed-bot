@@ -47,8 +47,8 @@ try:
     current_time_france = datetime.now(france_tz)
     current_time = current_time_france.strftime("%Y-%m-%d %H:%M:%S")
     
-    # Format French date with day and month names
-    french_locale_date = current_time_france.strftime("%A %d %B %Y à %H:%M:%S %Z")
+    # Format French date as dd/MM/YYYY with time
+    french_locale_date = current_time_france.strftime("%d/%m/%Y à %H:%M:%S %Z")
     
     row_data = {
         "Timestamp": current_time,
