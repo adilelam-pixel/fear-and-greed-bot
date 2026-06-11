@@ -84,12 +84,14 @@ try:
         ax.set_facecolor('white')
         
         # Plot crisp, high-contrast overall index line
-        ax.plot(df_recent['Timestamp'], df_recent['Overall Score'], color='#111111', linewidth=2.5, marker='o', markersize=4, label=f'Overall Index ({int(overall_score)})')
+        ax.plot(df_recent['Timestamp'], df_recent['Overall Score'], color='#111111', linewidth=2.5, marker='o', markersize=4, label='**Overall Index**')
         
         # Plot subtle, lightweight component lines
         for col in COMPONENTS.values():
             if col in df_recent.columns and df_recent[col].dtype != object:
-                ax.plot(df_recent['Timestamp'], df_recent[col], alpha=0.25, linewidth=1, linestyle='-', label=col)
+                # Make Market Momentum and Market Volatility bold
+                label = f'**{col}**' if col in ['Market Momentum', 'Market Volatility'] else col
+                ax.plot(df_recent['Timestamp'], df_recent[col], alpha=0.25, linewidth=1, linestyle='-', label=label)
                 
         # Clean typography and subtle borders
         ax.set_title(f'Fear & Greed Index: {int(overall_score)} ({overall_rating})', fontsize=12, fontweight='bold', color='#222222', pad=12, loc='left')
@@ -98,12 +100,21 @@ try:
         ax.grid(True, linestyle='--', linewidth=0.5, color='#e5e5e5')
         
         # Format x-axis with French date format dd/MM/YYYY HH:MM with proper minutes display
-        ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+        # Use MinuteLocator to show actual minutes
+        ax.xaxis.set_major_locator(mdates.MinuteLocator(interval=15))
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m/%Y\n%H:%M'))
         plt.xticks(rotation=0, ha='center', fontsize=8)
         
-        # Add legend with subtle styling
-        ax.legend(loc='upper left', fontsize=8, framealpha=0.95, edgecolor='#cccccc', facecolor='white')
+        # Add legend with subtle styling and parse markdown bold for specific entries
+        legend = ax.legend(loc='upper left', fontsize=8, framealpha=0.95, edgecolor='#cccccc', facecolor='white')
+        
+        # Make specific legend entries bold
+        for text in legend.get_texts():
+            label_text = text.get_text()
+            if '**' in label_text:
+                label_text = label_text.replace('**', '')
+                text.set_text(label_text)
+                text.set_weight('bold')
         
         # Desaturate layout edges
         for edge in ['top', 'right']: ax.spines[edge].set_visible(False)
