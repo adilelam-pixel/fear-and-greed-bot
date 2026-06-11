@@ -6,6 +6,10 @@ on:
     - cron: '0 21 * * *'
   workflow_dispatch: # Allows you to manually trigger it anytime
 
+# Future-proofs the runner for the June 16th, 2026 Node 24 upgrade
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   run-scraper:
     runs-on: ubuntu-latest
