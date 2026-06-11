@@ -6,7 +6,6 @@ on:
     - cron: '0 21 * * *'
   workflow_dispatch: # Allows you to manually trigger it anytime
 
-# Future-proofs the runner for the June 16th, 2026 Node 24 upgrade
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
@@ -14,7 +13,7 @@ jobs:
   run-scraper:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Crucial for allowing the bot to save your CSV file
+      contents: write
 
     steps:
     - name: Checkout repository data
@@ -28,9 +27,9 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install requests
+        pip install requests pandas matplotlib
 
-    - name: Run Scraper Script
+    - name: Run Scraper Script & Generate Chart
       run: python fetch_fear_greed.py
 
     - name: Commit and Save CSV to Repository
@@ -38,5 +37,17 @@ jobs:
         git config --global user.name "GitHub Action Bot"
         git config --global user.email "actions@github.com"
         git add fear_and_greed_history.csv
-        # Only commit if data changed, which prevents empty/error runs
         git diff --quiet && git diff --staged --quiet || (git commit -m "Automated daily data update" && git push)
+
+    - name: Send Email Report with Attached Chart
+      uses: dawidd6/action-send-mail@v3
+      with:
+        server_address: smtp.gmail.com
+        server_port: 465
+        username: ${{ secrets.MAIL_USERNAME }}
+        password: ${{ secrets.MAIL_PASSWORD }}
+        subject: "Daily Market Sentiment Report"
+        to: ${{ secrets.TARGET_EMAIL }}
+        from: "Fear & Greed Cloud Bot"
+        body: "The daily market evaluation scan has completed successfully. Please check the attached trend diagram for the 30-day index trajectory and individual market components."
+        attachments: fear_and_greed_chart.png
