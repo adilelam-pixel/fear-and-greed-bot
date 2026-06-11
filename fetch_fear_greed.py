@@ -89,7 +89,7 @@ try:
         # Plot subtle, lightweight component lines
         for col in COMPONENTS.values():
             if col in df_recent.columns and df_recent[col].dtype != object:
-                ax.plot(df_recent['Timestamp'], df_recent[col], alpha=0.25, linewidth=1, linestyle='-')
+                ax.plot(df_recent['Timestamp'], df_recent[col], alpha=0.25, linewidth=1, linestyle='-', label=col)
                 
         # Clean typography and subtle borders
         ax.set_title(f'Fear & Greed Index: {int(overall_score)} ({overall_rating})', fontsize=12, fontweight='bold', color='#222222', pad=12, loc='left')
@@ -101,6 +101,9 @@ try:
         ax.xaxis.set_major_locator(mdates.AutoDateLocator())
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m/%Y\n%H:%M'))
         plt.xticks(rotation=0, ha='center', fontsize=8)
+        
+        # Add legend with subtle styling
+        ax.legend(loc='upper left', fontsize=8, framealpha=0.95, edgecolor='#cccccc', facecolor='white')
         
         # Desaturate layout edges
         for edge in ['top', 'right']: ax.spines[edge].set_visible(False)
