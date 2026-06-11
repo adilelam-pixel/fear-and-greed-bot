@@ -2,6 +2,7 @@ import os
 import requests
 import csv
 from datetime import datetime
+import pytz
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -40,7 +41,14 @@ try:
     fgi_main = data.get("fear_and_greed", {})
     overall_score = round(fgi_main.get('score', 0), 2)
     overall_rating = fgi_main.get('rating', 'UNKNOWN').upper()
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Get current time in France timezone (Europe/Paris)
+    france_tz = pytz.timezone('Europe/Paris')
+    current_time_france = datetime.now(france_tz)
+    current_time = current_time_france.strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Format French date with day and month names
+    french_locale_date = current_time_france.strftime("%A %d %B %Y à %H:%M:%S %Z")
     
     row_data = {
         "Timestamp": current_time,
@@ -113,7 +121,7 @@ try:
           <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #222222; margin: 15px; padding: 0;">
             <div style="max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 8px; padding: 20px; background-color: #ffffff;">
               <h3 style="margin-top: 0; font-size: 18px; color: #111111; font-weight: 600;">Daily Sentiment Scan</h3>
-              <p style="font-size: 13px; color: #666666; margin-bottom: 20px;">Snapshot captured on {current_time} UTC</p>
+              <p style="font-size: 13px; color: #666666; margin-bottom: 20px;">Snapshot captured on {french_locale_date}</p>
               
               <div style="text-align: center; margin: 15px 0;">
                 <img src="cid:embedded_trend_chart" alt="Historical Trend Graph" style="max-width: 100%; height: auto; display: block; margin: 0 auto;">
