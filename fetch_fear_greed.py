@@ -97,9 +97,10 @@ try:
         ax.set_ylim(-5, 105)
         ax.grid(True, linestyle='--', linewidth=0.5, color='#e5e5e5')
         
-        # Format x-axis with French date format dd/MM/YYYY HH:MM
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m/%Y %H:%M'))
-        plt.xticks(rotation=45, ha='right')
+        # Format x-axis with French date format dd/MM/YYYY HH:MM with proper minutes display
+        ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m/%Y\n%H:%M'))
+        plt.xticks(rotation=0, ha='center', fontsize=8)
         
         # Desaturate layout edges
         for edge in ['top', 'right']: ax.spines[edge].set_visible(False)
