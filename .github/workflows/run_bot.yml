@@ -4,13 +4,13 @@ on:
   schedule:
     # Runs everyday at 21:00 UTC (4 PM EST / 5 PM EDT - right around market close)
     - cron: '0 21 * * *'
-  workflow_dispatch: # This allows you to click a button and run it manually whenever you want
+  workflow_dispatch: # Allows you to manually trigger it anytime
 
 jobs:
   run-scraper:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Gives the script permission to save and push the CSV file back
+      contents: write # Crucial for allowing the bot to save your CSV file
 
     steps:
     - name: Checkout repository data
@@ -34,5 +34,5 @@ jobs:
         git config --global user.name "GitHub Action Bot"
         git config --global user.email "actions@github.com"
         git add fear_and_greed_history.csv
-        # Only commit if changes exist, preventing errors if nothing changed
+        # Only commit if data changed, which prevents empty/error runs
         git diff --quiet && git diff --staged --quiet || (git commit -m "Automated daily data update" && git push)
