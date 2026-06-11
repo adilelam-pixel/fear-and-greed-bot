@@ -12,9 +12,11 @@ from email.mime.image import MIMEImage
 try:
     import pandas as pd
     import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
 except ImportError:
     pd = None
     plt = None
+    mdates = None
 
 url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
 headers = {
@@ -72,7 +74,7 @@ try:
         writer.writerow(row_data)
 
     # --- 3. Generate Clean "Light" Visual Chart ---
-    if pd is not None and plt is not None:
+    if pd is not None and plt is not None and mdates is not None:
         df = pd.read_csv(csv_filename)
         df['Timestamp'] = pd.to_datetime(df['Timestamp'])
         df_recent = df.tail(30) # Focus on trailing 30 evaluations
@@ -95,11 +97,16 @@ try:
         ax.set_ylim(-5, 105)
         ax.grid(True, linestyle='--', linewidth=0.5, color='#e5e5e5')
         
+        # Format x-axis with French date format dd/MM/YYYY HH:MM
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m/%Y %H:%M'))
+        plt.xticks(rotation=45, ha='right')
+        
         # Desaturate layout edges
         for edge in ['top', 'right']: ax.spines[edge].set_visible(False)
         for edge in ['left', 'bottom']: ax.spines[edge].set_color('#cccccc')
         ax.tick_params(colors='#555555', labelsize=9)
         
+        plt.tight_layout()
         plt.savefig('fear_and_greed_chart.png', dpi=130, bbox_inches='tight', facecolor='white')
         plt.close()
 
