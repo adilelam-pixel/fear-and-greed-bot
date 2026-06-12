@@ -3,6 +3,7 @@ import sys
 import requests
 import pandas as pd
 import datetime
+import time
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -13,7 +14,7 @@ import matplotlib.dates as mdates
 # --- Configuration & Global Variables ---
 csv_filename = "fear_and_greed_history.csv"
 
-# Mapping internal API sub-keys to pristine human-readable CSV columns
+# Mapping internal API sub-keys to human-readable CSV columns
 COMPONENTS = {
     "fng_momentum": "Market Momentum",
     "fng_stock_price_strength": "Stock Price Strength",
@@ -24,27 +25,38 @@ COMPONENTS = {
     "fng_safe_haven_demand": "Safe Haven Demand"
 }
 
-# --- 1. Fetch Live Sentiment Metrics from API ---
+# --- 1. Fetch Live Sentiment Metrics from API (With Auto-Retry) ---
 print("[INFO] Initiating data collection sequence from CNN Fear & Greed endpoint...")
 headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
 url = "https://api.money.cnn.com/fearandgreed/site/history"
 
-try:
-    response = requests.get(url, headers=headers, timeout=15)
-    response.raise_for_status()
-    data = response.json()
-    
-    # Isolate core rating layers
-    fng_now = data.get("fear_and_greed", {})
-    overall_score = fng_now.get("score", 50)
-    overall_rating = fng_now.get("rating", "NEUTRAL").upper()
-    
-    print(f"[SUCCESS] Collected Core Index: {int(overall_score)} ({overall_rating})")
-except Exception as e:
-    print(f"[FATAL ERROR] API connection aborted: {e}")
-    sys.exit(1)
+max_retries = 3
+retry_delay = 10  # Seconds to wait before trying again due to network flux
+
+for attempt in range(max_retries):
+    try:
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+        
+        # Isolate core rating layers
+        fng_now = data.get("fear_and_greed", {})
+        overall_score = fng_now.get("score", 50)
+        overall_rating = fng_now.get("rating", "NEUTRAL").upper()
+        
+        print(f"[SUCCESS] Collected Core Index: {int(overall_score)} ({overall_rating})")
+        break  # Connection successful! Break out of the retry loop.
+        
+    except Exception as e:
+        print(f"[WARNING] Attempt {attempt + 1}/{max_retries} failed due to network flux: {e}")
+        if attempt < max_retries - 1:
+            print(f"[INFO] Resting {retry_delay} seconds before re-attempting connection...")
+            time.sleep(retry_delay)
+        else:
+            print("[FATAL ERROR] All network resolution attempts completely exhausted.")
+            sys.exit(1)
 
 # --- 2. Update and Append Historical CSV Archive ---
 timestamp_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -60,7 +72,6 @@ for comp in data_components:
     api_key = comp.get("name")
     if api_key in COMPONENTS:
         csv_column_name = COMPONENTS[api_key]
-        # Fetch the most recent score point for this metric
         history_points = comp.get("history", [])
         if history_points:
             new_row[csv_column_name] = history_points[-1].get("rating", 50)
@@ -80,7 +91,7 @@ print(f"[INFO] History database synced successfully. Total rows: {len(df_history
 print("[INFO] Generating optimized high-contrast chart...")
 df = pd.read_csv(csv_filename)
 df['Timestamp'] = pd.to_datetime(df['Timestamp'])
-df_recent = df.tail(30)  # Focus on trailing 30 evaluations
+df_recent = df.tail(30)  # Focus on trailing 30 evaluations to preserve detail
 
 # Build canvas with flat white backdrop
 fig, ax = plt.subplots(figsize=(13, 6), facecolor='white')
@@ -100,7 +111,6 @@ COMPONENT_COLORS = {
 # Plot sub-component tracks
 for col in COMPONENTS.values():
     if col in df_recent.columns and df_recent[col].dtype != object:
-        # Bold text flags applied selectively via processing logic below
         label = f'**{col}**' if col in ['Market Momentum', 'Market Volatility'] else col
         color = COMPONENT_COLORS.get(col, "#7f7f7f")
         
@@ -131,7 +141,7 @@ ax.set_ylabel('Score Scale', fontsize=9, color='#555555')
 ax.set_ylim(-5, 105)
 ax.grid(True, linestyle='--', linewidth=0.5, color='#e5e5e5')
 
-# AutoDateLocator intelligently limits total ticks based on timeline density
+# AutoDateLocator intelligently limits total ticks based on timeline density to avoid overlapping text
 ax.xaxis.set_major_locator(mdates.AutoDateLocator(minticks=4, maxticks=8))
 ax.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m/%Y\n%H:%M'))
 plt.xticks(rotation=30, ha='right', fontsize=8)
