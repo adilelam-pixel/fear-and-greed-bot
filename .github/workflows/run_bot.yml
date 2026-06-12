@@ -2,8 +2,7 @@ name: Daily Fear and Greed Tracker
 
 on:
   schedule:
-    - cron: '30 12 * * *'  # Runs at 21:00 UTC
-  workflow_dispatch:
+    - cron: '* * * * *'  # Runs every minute (for testing only)
 
 # Grant write permissions to GITHUB_TOKEN for the entire workflow
 permissions:
