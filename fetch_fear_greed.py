@@ -34,8 +34,22 @@ COMPONENTS = {
     "safe_haven_demand": "Safe Haven Demand"
 }
 
+# ===== DEBUG LOGGING =====
+print("=" * 60)
+print(f"[DEBUG] Script started at {datetime.now(pytz.UTC)}")
+print(f"[DEBUG] Checking environment variables...")
+mail_user = os.environ.get("MAIL_USERNAME")
+mail_pass = os.environ.get("MAIL_PASSWORD")
+target_email = os.environ.get("TARGET_EMAIL")
+print(f"[DEBUG] MAIL_USERNAME: {'SET' if mail_user else 'NOT SET'}")
+print(f"[DEBUG] MAIL_PASSWORD: {'SET' if mail_pass else 'NOT SET'}")
+print(f"[DEBUG] TARGET_EMAIL: {target_email if target_email else 'NOT SET'}")
+print(f"[DEBUG] All email configs present: {bool(mail_user and mail_pass and target_email)}")
+print("=" * 60)
+
 try:
     # --- 1. Fetch Live Sentiment Values ---
+    print("\n[INFO] Fetching Fear & Greed Index data...")
     response = requests.get(url, headers=headers)
     response.raise_for_status()
     data = response.json()
@@ -43,6 +57,8 @@ try:
     fgi_main = data.get("fear_and_greed", {})
     overall_score = round(fgi_main.get('score', 0), 2)
     overall_rating = fgi_main.get('rating', 'UNKNOWN').upper()
+    
+    print(f"[INFO] Overall Score: {overall_score}, Rating: {overall_rating}")
     
     # Get current time in France timezone (Europe/Paris)
     france_tz = pytz.timezone('Europe/Paris')
@@ -64,6 +80,7 @@ try:
         row_data[column_name] = round(score, 2) if score is not None else "N/A"
 
     # --- 2. Write to CSV Spreadsheet ---
+    print(f"[INFO] Writing data to {csv_filename}...")
     file_exists = os.path.isfile(csv_filename)
     fieldnames = ["Timestamp", "Overall Score", "Overall Rating"] + list(COMPONENTS.values())
     
@@ -72,9 +89,11 @@ try:
         if not file_exists:
             writer.writeheader()
         writer.writerow(row_data)
+    print("[INFO] CSV updated successfully.")
 
     # --- 3. Generate Clean "Light" Visual Chart ---
     if pd is not None and plt is not None and mdates is not None:
+        print("[INFO] Generating chart...")
         df = pd.read_csv(csv_filename)
         df['Timestamp'] = pd.to_datetime(df['Timestamp'])
         df_recent = df.tail(30) # Focus on trailing 30 evaluations
@@ -124,52 +143,80 @@ try:
         plt.tight_layout()
         plt.savefig('fear_and_greed_chart.png', dpi=130, bbox_inches='tight', facecolor='white')
         plt.close()
+        print("[INFO] Chart saved as 'fear_and_greed_chart.png'")
+    else:
+        print("[WARNING] pandas, matplotlib, or mdates not available. Skipping chart generation.")
 
     # --- 4. Send Email with Inline Content Object ---
-    mail_user = os.environ.get("MAIL_USERNAME")
-    mail_pass = os.environ.get("MAIL_PASSWORD")
-    target_email = os.environ.get("TARGET_EMAIL")
-
     if mail_user and mail_pass and target_email:
-        # 'related' structure enables linking image references inside HTML structures
-        msg = MIMEMultipart('related')
-        msg['Subject'] = f"Market Sentiment Alert: {int(overall_score)} ({overall_rating})"
-        msg['From'] = f"Fear & Greed Cloud Bot <{mail_user}>"
-        msg['To'] = target_email
+        print("\n[INFO] Email credentials found. Preparing email...")
+        try:
+            # 'related' structure enables linking image references inside HTML structures
+            msg = MIMEMultipart('related')
+            msg['Subject'] = f"Market Sentiment Alert: {int(overall_score)} ({overall_rating})"
+            msg['From'] = f"Fear & Greed Cloud Bot <{mail_user}>"
+            msg['To'] = target_email
 
-        # Formatted email body referencing Content-ID (cid)
-        html_body = f"""
-        <html>
-          <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #222222; margin: 15px; padding: 0;">
-            <div style="max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 8px; padding: 20px; background-color: #ffffff;">
-              <h3 style="margin-top: 0; font-size: 18px; color: #111111; font-weight: 600;">Daily Sentiment Scan</h3>
-              <p style="font-size: 13px; color: #666666; margin-bottom: 20px;">Snapshot captured on {french_locale_date}</p>
-              
-              <div style="text-align: center; margin: 15px 0;">
-                <img src="cid:embedded_trend_chart" alt="Historical Trend Graph" style="max-width: 100%; height: auto; display: block; margin: 0 auto;">
-              </div>
-              
-              <hr style="border: 0; border-top: 1px solid #eeeeee; margin: 20px 0;">
-              <p style="font-size: 11px; color: #999999; margin: 0; text-align: center;">Automated server transmission. No manual monitoring required.</p>
-            </div>
-          </body>
-        </html>
-        """
-        msg.attach(MIMEText(html_body, 'html'))
+            # Formatted email body referencing Content-ID (cid)
+            html_body = f"""
+            <html>
+              <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #222222; margin: 15px; padding: 0;">
+                <div style="max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 8px; padding: 20px; background-color: #ffffff;">
+                  <h3 style="margin-top: 0; font-size: 18px; color: #111111; font-weight: 600;">Daily Sentiment Scan</h3>
+                  <p style="font-size: 13px; color: #666666; margin-bottom: 20px;">Snapshot captured on {french_locale_date}</p>
+                  
+                  <div style="text-align: center; margin: 15px 0;">
+                    <img src="cid:embedded_trend_chart" alt="Historical Trend Graph" style="max-width: 100%; height: auto; display: block; margin: 0 auto;">
+                  </div>
+                  
+                  <hr style="border: 0; border-top: 1px solid #eeeeee; margin: 20px 0;">
+                  <p style="font-size: 11px; color: #999999; margin: 0; text-align: center;">Automated server transmission. No manual monitoring required.</p>
+                </div>
+              </body>
+            </html>
+            """
+            msg.attach(MIMEText(html_body, 'html'))
 
-        # Bind image binary stream into the specific container ID
-        if os.path.exists('fear_and_greed_chart.png'):
-            with open('fear_and_greed_chart.png', 'rb') as f:
-                img_payload = MIMEImage(f.read())
-            img_payload.add_header('Content-ID', '<embedded_trend_chart>')
-            img_payload.add_header('Content-Disposition', 'inline', filename='fear_and_greed_chart.png')
-            msg.attach(img_payload)
+            # Bind image binary stream into the specific container ID
+            if os.path.exists('fear_and_greed_chart.png'):
+                with open('fear_and_greed_chart.png', 'rb') as f:
+                    img_payload = MIMEImage(f.read())
+                img_payload.add_header('Content-ID', '<embedded_trend_chart>')
+                img_payload.add_header('Content-Disposition', 'inline', filename='fear_and_greed_chart.png')
+                msg.attach(img_payload)
+                print("[DEBUG] Chart image attached to email")
+            else:
+                print("[WARNING] Chart image not found. Email will be sent without chart.")
 
-        # Authenticate connection and dispatch message
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-            server.login(mail_user, mail_pass)
-            server.sendmail(mail_user, target_email, msg.as_string())
-        print("Email report dispatched successfully.")
-            
+            # Authenticate connection and dispatch message
+            print(f"[DEBUG] Connecting to smtp.gmail.com:465...")
+            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+                print("[DEBUG] SMTP connection established. Logging in...")
+                server.login(mail_user, mail_pass)
+                print("[DEBUG] Login successful. Sending email...")
+                server.sendmail(mail_user, target_email, msg.as_string())
+                print("[DEBUG] Email sent successfully.")
+            print(f"[SUCCESS] ✅ Email report dispatched successfully to {target_email}")
+        except smtplib.SMTPAuthenticationError as auth_err:
+            print(f"[ERROR] ❌ SMTP Authentication failed: {auth_err}")
+            raise
+        except smtplib.SMTPException as smtp_err:
+            print(f"[ERROR] ❌ SMTP error occurred: {smtp_err}")
+            raise
+        except Exception as email_err:
+            print(f"[ERROR] ❌ Email sending failed: {email_err}")
+            raise
+    else:
+        print("\n[WARNING] ⚠️ Email credentials incomplete. Email will NOT be sent.")
+        print(f"  - MAIL_USERNAME: {'SET' if mail_user else 'MISSING'}")
+        print(f"  - MAIL_PASSWORD: {'SET' if mail_pass else 'MISSING'}")
+        print(f"  - TARGET_EMAIL: {'SET' if target_email else 'MISSING'}")
+        
 except Exception as e:
-    print(f"Error handling task sequence: {e}")
+    print(f"\n[ERROR] ❌ Error handling task sequence: {e}")
+    import traceback
+    print(traceback.format_exc())
+finally:
+    print("\n" + "=" * 60)
+    print(f"[DEBUG] Script finished at {datetime.now(pytz.UTC)}")
+    print("=" * 60)
