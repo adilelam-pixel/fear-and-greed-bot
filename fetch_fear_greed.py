@@ -3,6 +3,7 @@ import sys
 import requests
 import pandas as pd
 import datetime
+from zoneinfo import ZoneInfo  # Explicitly handle international timezones
 import time
 import smtplib
 from email.mime.multipart import MIMEMultipart
@@ -59,8 +60,11 @@ for attempt in range(max_retries):
             print("[FATAL ERROR] All network connection attempts completely exhausted.")
             sys.exit(1)
 
-# --- 2. Update and Append Historical CSV Archive ---
-timestamp_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+# --- 2. Update and Append Historical CSV Archive (French Timezone) ---
+# Enforce the Europe/Paris timezone context regardless of runner server location
+french_tz = ZoneInfo("Europe/Paris")
+timestamp_str = datetime.datetime.now(french_tz).strftime("%Y-%m-%d %H:%M:%S")
+
 new_row = {
     "Timestamp": timestamp_str,
     "Overall Score": overall_score,
@@ -82,7 +86,7 @@ else:
 
 df_history = pd.concat([df_history, pd.DataFrame([new_row])], ignore_index=True)
 df_history.to_csv(csv_filename, index=False)
-print(f"[INFO] History database synced successfully. Total rows: {len(df_history)}")
+print(f"[INFO] History database synced successfully ({timestamp_str} French Time). Total rows: {len(df_history)}")
 
 # --- 3. Generate Clean High-Contrast Visual Chart ---
 print("[INFO] Generating optimized high-contrast chart...")
@@ -185,7 +189,7 @@ html_content = f"""
 <html>
   <body style="font-family: Arial, sans-serif; color: #333333; line-height: 1.6;">
     <h2 style="color: #222222; margin-bottom: 5px;">Fear & Greed Market Index Update</h2>
-    <p style="font-size: 11px; color: #888888; margin-top: 0;">Evaluation Timestamp: {timestamp_str}</p>
+    <p style="font-size: 11px; color: #888888; margin-top: 0;">Evaluation Timestamp: {timestamp_str} (Paris Time)</p>
     <hr style="border: 0; border-top: 1px solid #eeeeee; margin: 20px 0;" />
     
     <p style="font-size: 16px;">
