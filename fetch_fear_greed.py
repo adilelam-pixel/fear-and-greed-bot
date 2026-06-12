@@ -14,26 +14,27 @@ import matplotlib.dates as mdates
 # --- Configuration & Global Variables ---
 csv_filename = "fear_and_greed_history.csv"
 
-# Mapping internal API sub-keys to human-readable CSV columns
+# Mapping CNN's active JSON keys to your established human-readable CSV columns
 COMPONENTS = {
-    "fng_momentum": "Market Momentum",
-    "fng_stock_price_strength": "Stock Price Strength",
-    "fng_stock_price_breadth": "Stock Price Breadth",
-    "fng_put_call_options": "Put and Call Options",
-    "fng_market_volatility": "Market Volatility",
-    "fng_junk_bond_demand": "Junk Bond Demand",
-    "fng_safe_haven_demand": "Safe Haven Demand"
+    "market_momentum_sp500": "Market Momentum",
+    "stock_price_strength": "Stock Price Strength",
+    "stock_price_breadth": "Stock Price Breadth",
+    "put_call_options": "Put and Call Options",
+    "market_volatility_vix": "Market Volatility",
+    "junk_bond_demand": "Junk Bond Demand",
+    "safe_haven_demand": "Safe Haven Demand"
 }
 
-# --- 1. Fetch Live Sentiment Metrics from API (With Auto-Retry) ---
-print("[INFO] Initiating data collection sequence from CNN Fear & Greed endpoint...")
+# --- 1. Fetch Live Sentiment Metrics from Active API Endpoint ---
+print("[INFO] Initiating data collection sequence from live CNN endpoint...")
 headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
-url = "https://api.money.cnn.com/fearandgreed/site/history"
+url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
 
 max_retries = 3
 retry_delay = 10  # Seconds to wait before trying again due to network flux
+data = None
 
 for attempt in range(max_retries):
     try:
@@ -41,21 +42,21 @@ for attempt in range(max_retries):
         response.raise_for_status()
         data = response.json()
         
-        # Isolate core rating layers
+        # Isolate active master indices
         fng_now = data.get("fear_and_greed", {})
         overall_score = fng_now.get("score", 50)
-        overall_rating = fng_now.get("rating", "NEUTRAL").upper()
+        overall_rating = str(fng_now.get("rating", "NEUTRAL")).upper()
         
         print(f"[SUCCESS] Collected Core Index: {int(overall_score)} ({overall_rating})")
-        break  # Connection successful! Break out of the retry loop.
+        break  # Connection successful! Break out of loop.
         
     except Exception as e:
-        print(f"[WARNING] Attempt {attempt + 1}/{max_retries} failed due to network flux: {e}")
+        print(f"[WARNING] Attempt {attempt + 1}/{max_retries} failed due to network error: {e}")
         if attempt < max_retries - 1:
-            print(f"[INFO] Resting {retry_delay} seconds before re-attempting connection...")
+            print(f"[INFO] Resting {retry_delay} seconds before re-attempting...")
             time.sleep(retry_delay)
         else:
-            print("[FATAL ERROR] All network resolution attempts completely exhausted.")
+            print("[FATAL ERROR] All network connection attempts completely exhausted.")
             sys.exit(1)
 
 # --- 2. Update and Append Historical CSV Archive ---
@@ -66,17 +67,13 @@ new_row = {
     "Rating": overall_rating
 }
 
-# Extract specific component scores dynamically from the dataset
-data_components = data.get("fear_and_greed_historical", {}).get("components", [])
-for comp in data_components:
-    api_key = comp.get("name")
-    if api_key in COMPONENTS:
-        csv_column_name = COMPONENTS[api_key]
-        history_points = comp.get("history", [])
-        if history_points:
-            new_row[csv_column_name] = history_points[-1].get("rating", 50)
+# Parse sub-components out of the active JSON contract
+for api_key, csv_column_name in COMPONENTS.items():
+    comp_block = data.get(api_key, {})
+    score_val = comp_block.get("score", 50)
+    new_row[csv_column_name] = score_val if score_val is not None else 50
 
-# Load existing log or create a new one if missing
+# Load existing log tracking database or create a new one if missing
 if os.path.exists(csv_filename):
     df_history = pd.read_csv(csv_filename)
 else:
@@ -87,7 +84,7 @@ df_history = pd.concat([df_history, pd.DataFrame([new_row])], ignore_index=True)
 df_history.to_csv(csv_filename, index=False)
 print(f"[INFO] History database synced successfully. Total rows: {len(df_history)}")
 
-# --- 3. Generate Clean "Light" Visual Chart ---
+# --- 3. Generate Clean High-Contrast Visual Chart ---
 print("[INFO] Generating optimized high-contrast chart...")
 df = pd.read_csv(csv_filename)
 df['Timestamp'] = pd.to_datetime(df['Timestamp'])
@@ -97,7 +94,7 @@ df_recent = df.tail(30)  # Focus on trailing 30 evaluations to preserve detail
 fig, ax = plt.subplots(figsize=(13, 6), facecolor='white')
 ax.set_facecolor('white')
 
-# Explicit high-contrast color palette for easy distinction
+# Explicit color mapping palette for zero-blur distinct identification
 COMPONENT_COLORS = {
     "Market Momentum": "#1f77b4",       # Electric Blue
     "Stock Price Strength": "#ff7f0e",   # Safety Orange
@@ -117,7 +114,7 @@ for col in COMPONENTS.values():
         ax.plot(
             df_recent['Timestamp'], 
             df_recent[col], 
-            alpha=0.5,          # Balanced opacity for clarity without crowding
+            alpha=0.5,          # Stable opacity to make fine lines distinct
             linewidth=1.2,      
             linestyle='-', 
             color=color, 
@@ -141,7 +138,7 @@ ax.set_ylabel('Score Scale', fontsize=9, color='#555555')
 ax.set_ylim(-5, 105)
 ax.grid(True, linestyle='--', linewidth=0.5, color='#e5e5e5')
 
-# AutoDateLocator intelligently limits total ticks based on timeline density to avoid overlapping text
+# AutoDateLocator intelligently prevents label crowding across dynamic timelines
 ax.xaxis.set_major_locator(mdates.AutoDateLocator(minticks=4, maxticks=8))
 ax.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m/%Y\n%H:%M'))
 plt.xticks(rotation=30, ha='right', fontsize=8)
