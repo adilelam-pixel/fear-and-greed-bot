@@ -2,9 +2,9 @@ name: Daily Fear and Greed Tracker
 
 on:
   schedule:
-    # Tells GitHub to attempt execution every 5 minutes for rapid cron testing
-    - cron: '*/5 * * * *'
-  workflow_dispatch: # Allows you to manually trigger it anytime
+    # 09:55 UTC turns into 11:55 AM French Time today
+    - cron: '55 09 * * *'
+  workflow_dispatch:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
