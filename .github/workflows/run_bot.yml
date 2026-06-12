@@ -3,7 +3,7 @@ name: Daily Fear and Greed Tracker
 on:
   schedule:
     # Your target time: 21:00 UTC (23:00 French Summer Time)
-    - cron: '0 21 * * *'
+    - cron: '0 11 * * *'
   workflow_dispatch: 
   push:
     branches:
