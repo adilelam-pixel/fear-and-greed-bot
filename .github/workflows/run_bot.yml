@@ -2,9 +2,8 @@ name: Daily Fear and Greed Tracker
 
 on:
   schedule:
-    # Test schedule: runs at 07:20 UTC (3 minutes from now at 07:17 UTC)
-    # Once verified working, change to: 0 21 * * * (21:00 UTC / 4 PM EST / 5 PM EDT)
-    - cron: '23 07 * * *'
+    # Tells GitHub to attempt execution every 5 minutes for rapid cron testing
+    - cron: '*/5 * * * *'
   workflow_dispatch: # Allows you to manually trigger it anytime
 
 env:
