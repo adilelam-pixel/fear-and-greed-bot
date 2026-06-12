@@ -1,222 +1,222 @@
 import os
+import sys
 import requests
-import csv
-from datetime import datetime
-import pytz
+import pandas as pd
+import datetime
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 
-# Safe imports for data framing and charting
-try:
-    import pandas as pd
-    import matplotlib.pyplot as plt
-    import matplotlib.dates as mdates
-except ImportError:
-    pd = None
-    plt = None
-    mdates = None
+# --- Configuration & Global Variables ---
+csv_filename = "fear_and_greed_history.csv"
 
-url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
+# Mapping internal API sub-keys to pristine human-readable CSV columns
+COMPONENTS = {
+    "fng_momentum": "Market Momentum",
+    "fng_stock_price_strength": "Stock Price Strength",
+    "fng_stock_price_breadth": "Stock Price Breadth",
+    "fng_put_call_options": "Put and Call Options",
+    "fng_market_volatility": "Market Volatility",
+    "fng_junk_bond_demand": "Junk Bond Demand",
+    "fng_safe_haven_demand": "Safe Haven Demand"
+}
+
+# --- 1. Fetch Live Sentiment Metrics from API ---
+print("[INFO] Initiating data collection sequence from CNN Fear & Greed endpoint...")
 headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
-csv_filename = "fear_and_greed_history.csv"
-
-COMPONENTS = {
-    "market_momentum_sp500": "Market Momentum",
-    "stock_price_strength": "Stock Price Strength",
-    "stock_price_breadth": "Stock Price Breadth",
-    "put_call_options": "Put and Call Options",
-    "market_volatility_vix": "Market Volatility",
-    "junk_bond_demand": "Junk Bond Demand",
-    "safe_haven_demand": "Safe Haven Demand"
-}
-
-# ===== DEBUG LOGGING =====
-print("=" * 60)
-print(f"[DEBUG] Script started at {datetime.now(pytz.UTC)}")
-print(f"[DEBUG] Checking environment variables...")
-mail_user = os.environ.get("MAIL_USERNAME")
-mail_pass = os.environ.get("MAIL_PASSWORD")
-target_email = os.environ.get("TARGET_EMAIL")
-print(f"[DEBUG] MAIL_USERNAME: {'SET' if mail_user else 'NOT SET'}")
-print(f"[DEBUG] MAIL_PASSWORD: {'SET' if mail_pass else 'NOT SET'}")
-print(f"[DEBUG] TARGET_EMAIL: {target_email if target_email else 'NOT SET'}")
-print(f"[DEBUG] All email configs present: {bool(mail_user and mail_pass and target_email)}")
-print("=" * 60)
+url = "https://api.money.cnn.com/fearandgreed/site/history"
 
 try:
-    # --- 1. Fetch Live Sentiment Values ---
-    print("\n[INFO] Fetching Fear & Greed Index data...")
-    response = requests.get(url, headers=headers)
+    response = requests.get(url, headers=headers, timeout=15)
     response.raise_for_status()
     data = response.json()
     
-    fgi_main = data.get("fear_and_greed", {})
-    overall_score = round(fgi_main.get('score', 0), 2)
-    overall_rating = fgi_main.get('rating', 'UNKNOWN').upper()
+    # Isolate core rating layers
+    fng_now = data.get("fear_and_greed", {})
+    overall_score = fng_now.get("score", 50)
+    overall_rating = fng_now.get("rating", "NEUTRAL").upper()
     
-    print(f"[INFO] Overall Score: {overall_score}, Rating: {overall_rating}")
-    
-    # Get current time in France timezone (Europe/Paris)
-    france_tz = pytz.timezone('Europe/Paris')
-    current_time_france = datetime.now(france_tz)
-    current_time = current_time_france.strftime("%Y-%m-%d %H:%M:%S")
-    
-    # Format French date as dd/MM/YYYY with time
-    french_locale_date = current_time_france.strftime("%d/%m/%Y à %H:%M:%S %Z")
-    
-    row_data = {
-        "Timestamp": current_time,
-        "Overall Score": overall_score,
-        "Overall Rating": overall_rating
-    }
-    
-    for key, column_name in COMPONENTS.items():
-        comp_data = data.get(key, {})
-        score = comp_data.get("score")
-        row_data[column_name] = round(score, 2) if score is not None else "N/A"
-
-    # --- 2. Write to CSV Spreadsheet ---
-    print(f"[INFO] Writing data to {csv_filename}...")
-    file_exists = os.path.isfile(csv_filename)
-    fieldnames = ["Timestamp", "Overall Score", "Overall Rating"] + list(COMPONENTS.values())
-    
-    with open(csv_filename, mode='a', newline='', encoding='utf-8') as file:
-        writer = csv.DictWriter(file, fieldnames=fieldnames)
-        if not file_exists:
-            writer.writeheader()
-        writer.writerow(row_data)
-    print("[INFO] CSV updated successfully.")
-
-    # --- 3. Generate Clean "Light" Visual Chart ---
-    if pd is not None and plt is not None and mdates is not None:
-        print("[INFO] Generating chart...")
-        df = pd.read_csv(csv_filename)
-        df['Timestamp'] = pd.to_datetime(df['Timestamp'])
-        df_recent = df.tail(30) # Focus on trailing 30 evaluations
-        
-        # Build canvas with flat white backdrop - wider for x-axis labels
-        fig, ax = plt.subplots(figsize=(14, 5.5), facecolor='white')
-        ax.set_facecolor('white')
-        
-        # Plot crisp, high-contrast overall index line
-        ax.plot(df_recent['Timestamp'], df_recent['Overall Score'], color='#111111', linewidth=2.5, marker='o', markersize=4, label='**Overall Index**')
-        
-        # Plot subtle, lightweight component lines
-        for col in COMPONENTS.values():
-            if col in df_recent.columns and df_recent[col].dtype != object:
-                # Make Market Momentum and Market Volatility bold
-                label = f'**{col}**' if col in ['Market Momentum', 'Market Volatility'] else col
-                ax.plot(df_recent['Timestamp'], df_recent[col], alpha=0.25, linewidth=1, linestyle='-', label=label)
-                
-        # Clean typography and subtle borders
-        ax.set_title(f'Fear & Greed Index: {int(overall_score)} ({overall_rating})', fontsize=12, fontweight='bold', color='#222222', pad=12, loc='left')
-        ax.set_ylabel('Score Scale', fontsize=9, color='#555555')
-        ax.set_ylim(-5, 105)
-        ax.grid(True, linestyle='--', linewidth=0.5, color='#e5e5e5')
-        
-        # Format x-axis with French date format dd/MM/YYYY HH:MM with proper minutes display
-        # Use MinuteLocator to show actual minutes at 30-minute intervals for less crowding
-        ax.xaxis.set_major_locator(mdates.MinuteLocator(interval=30))
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m/%Y\n%H:%M'))
-        plt.xticks(rotation=45, ha='right', fontsize=7)
-        
-        # Add legend with subtle styling placed outside the plot area
-        legend = ax.legend(loc='upper left', fontsize=8, framealpha=0.95, edgecolor='#cccccc', facecolor='white', bbox_to_anchor=(1.02, 1))
-        
-        # Make specific legend entries bold
-        for text in legend.get_texts():
-            label_text = text.get_text()
-            if '**' in label_text:
-                label_text = label_text.replace('**', '')
-                text.set_text(label_text)
-                text.set_weight('bold')
-        
-        # Desaturate layout edges
-        for edge in ['top', 'right']: ax.spines[edge].set_visible(False)
-        for edge in ['left', 'bottom']: ax.spines[edge].set_color('#cccccc')
-        ax.tick_params(colors='#555555', labelsize=9)
-        
-        plt.tight_layout()
-        plt.savefig('fear_and_greed_chart.png', dpi=130, bbox_inches='tight', facecolor='white')
-        plt.close()
-        print("[INFO] Chart saved as 'fear_and_greed_chart.png'")
-    else:
-        print("[WARNING] pandas, matplotlib, or mdates not available. Skipping chart generation.")
-
-    # --- 4. Send Email with Inline Content Object ---
-    if mail_user and mail_pass and target_email:
-        print("\n[INFO] Email credentials found. Preparing email...")
-        try:
-            # 'related' structure enables linking image references inside HTML structures
-            msg = MIMEMultipart('related')
-            msg['Subject'] = f"Market Sentiment Alert: {int(overall_score)} ({overall_rating})"
-            msg['From'] = f"Fear & Greed Cloud Bot <{mail_user}>"
-            msg['To'] = target_email
-
-            # Formatted email body referencing Content-ID (cid)
-            html_body = f"""
-            <html>
-              <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #222222; margin: 15px; padding: 0;">
-                <div style="max-width: 600px; margin: 0 auto; border: 1px solid #eaeaea; border-radius: 8px; padding: 20px; background-color: #ffffff;">
-                  <h3 style="margin-top: 0; font-size: 18px; color: #111111; font-weight: 600;">Daily Sentiment Scan</h3>
-                  <p style="font-size: 13px; color: #666666; margin-bottom: 20px;">Snapshot captured on {french_locale_date}</p>
-                  
-                  <div style="text-align: center; margin: 15px 0;">
-                    <img src="cid:embedded_trend_chart" alt="Historical Trend Graph" style="max-width: 100%; height: auto; display: block; margin: 0 auto;">
-                  </div>
-                  
-                  <hr style="border: 0; border-top: 1px solid #eeeeee; margin: 20px 0;">
-                  <p style="font-size: 11px; color: #999999; margin: 0; text-align: center;">Automated server transmission. No manual monitoring required.</p>
-                </div>
-              </body>
-            </html>
-            """
-            msg.attach(MIMEText(html_body, 'html'))
-
-            # Bind image binary stream into the specific container ID
-            if os.path.exists('fear_and_greed_chart.png'):
-                with open('fear_and_greed_chart.png', 'rb') as f:
-                    img_payload = MIMEImage(f.read())
-                img_payload.add_header('Content-ID', '<embedded_trend_chart>')
-                img_payload.add_header('Content-Disposition', 'inline', filename='fear_and_greed_chart.png')
-                msg.attach(img_payload)
-                print("[DEBUG] Chart image attached to email")
-            else:
-                print("[WARNING] Chart image not found. Email will be sent without chart.")
-
-            # Authenticate connection and dispatch message
-            print(f"[DEBUG] Connecting to smtp.gmail.com:465...")
-            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-                print("[DEBUG] SMTP connection established. Logging in...")
-                server.login(mail_user, mail_pass)
-                print("[DEBUG] Login successful. Sending email...")
-                server.sendmail(mail_user, target_email, msg.as_string())
-                print("[DEBUG] Email sent successfully.")
-            print(f"[SUCCESS] ✅ Email report dispatched successfully to {target_email}")
-        except smtplib.SMTPAuthenticationError as auth_err:
-            print(f"[ERROR] ❌ SMTP Authentication failed: {auth_err}")
-            raise
-        except smtplib.SMTPException as smtp_err:
-            print(f"[ERROR] ❌ SMTP error occurred: {smtp_err}")
-            raise
-        except Exception as email_err:
-            print(f"[ERROR] ❌ Email sending failed: {email_err}")
-            raise
-    else:
-        print("\n[WARNING] ⚠️ Email credentials incomplete. Email will NOT be sent.")
-        print(f"  - MAIL_USERNAME: {'SET' if mail_user else 'MISSING'}")
-        print(f"  - MAIL_PASSWORD: {'SET' if mail_pass else 'MISSING'}")
-        print(f"  - TARGET_EMAIL: {'SET' if target_email else 'MISSING'}")
-        
+    print(f"[SUCCESS] Collected Core Index: {int(overall_score)} ({overall_rating})")
 except Exception as e:
-    print(f"\n[ERROR] ❌ Error handling task sequence: {e}")
-    import traceback
-    print(traceback.format_exc())
-finally:
-    print("\n" + "=" * 60)
-    print(f"[DEBUG] Script finished at {datetime.now(pytz.UTC)}")
-    print("=" * 60)
+    print(f"[FATAL ERROR] API connection aborted: {e}")
+    sys.exit(1)
+
+# --- 2. Update and Append Historical CSV Archive ---
+timestamp_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+new_row = {
+    "Timestamp": timestamp_str,
+    "Overall Score": overall_score,
+    "Rating": overall_rating
+}
+
+# Extract specific component scores dynamically from the dataset
+data_components = data.get("fear_and_greed_historical", {}).get("components", [])
+for comp in data_components:
+    api_key = comp.get("name")
+    if api_key in COMPONENTS:
+        csv_column_name = COMPONENTS[api_key]
+        # Fetch the most recent score point for this metric
+        history_points = comp.get("history", [])
+        if history_points:
+            new_row[csv_column_name] = history_points[-1].get("rating", 50)
+
+# Load existing log or create a new one if missing
+if os.path.exists(csv_filename):
+    df_history = pd.read_csv(csv_filename)
+else:
+    columns = ["Timestamp", "Overall Score", "Rating"] + list(COMPONENTS.values())
+    df_history = pd.DataFrame(columns=columns)
+
+df_history = pd.concat([df_history, pd.DataFrame([new_row])], ignore_index=True)
+df_history.to_csv(csv_filename, index=False)
+print(f"[INFO] History database synced successfully. Total rows: {len(df_history)}")
+
+# --- 3. Generate Clean "Light" Visual Chart ---
+print("[INFO] Generating optimized high-contrast chart...")
+df = pd.read_csv(csv_filename)
+df['Timestamp'] = pd.to_datetime(df['Timestamp'])
+df_recent = df.tail(30)  # Focus on trailing 30 evaluations
+
+# Build canvas with flat white backdrop
+fig, ax = plt.subplots(figsize=(13, 6), facecolor='white')
+ax.set_facecolor('white')
+
+# Explicit high-contrast color palette for easy distinction
+COMPONENT_COLORS = {
+    "Market Momentum": "#1f77b4",       # Electric Blue
+    "Stock Price Strength": "#ff7f0e",   # Safety Orange
+    "Stock Price Breadth": "#2ca02c",    # Forest Green
+    "Put and Call Options": "#d62728",   # Crimson Red
+    "Market Volatility": "#9467bd",      # Deep Purple
+    "Junk Bond Demand": "#8c564b",       # Cocoa Brown
+    "Safe Haven Demand": "#e377c2"       # Vibrant Pink
+}
+
+# Plot sub-component tracks
+for col in COMPONENTS.values():
+    if col in df_recent.columns and df_recent[col].dtype != object:
+        # Bold text flags applied selectively via processing logic below
+        label = f'**{col}**' if col in ['Market Momentum', 'Market Volatility'] else col
+        color = COMPONENT_COLORS.get(col, "#7f7f7f")
+        
+        ax.plot(
+            df_recent['Timestamp'], 
+            df_recent[col], 
+            alpha=0.5,          # Balanced opacity for clarity without crowding
+            linewidth=1.2,      
+            linestyle='-', 
+            color=color, 
+            label=label
+        )
+
+# Plot overall master index line (Ultra-bold high-contrast black line)
+ax.plot(
+    df_recent['Timestamp'], 
+    df_recent['Overall Score'], 
+    color='#111111', 
+    linewidth=3.5, 
+    marker='o', 
+    markersize=5, 
+    label='**Overall Index**'
+)
+        
+# Layout decorations
+ax.set_title(f'Fear & Greed Index: {int(overall_score)} ({overall_rating})', fontsize=13, fontweight='bold', color='#222222', pad=15, loc='left')
+ax.set_ylabel('Score Scale', fontsize=9, color='#555555')
+ax.set_ylim(-5, 105)
+ax.grid(True, linestyle='--', linewidth=0.5, color='#e5e5e5')
+
+# AutoDateLocator intelligently limits total ticks based on timeline density
+ax.xaxis.set_major_locator(mdates.AutoDateLocator(minticks=4, maxticks=8))
+ax.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m/%Y\n%H:%M'))
+plt.xticks(rotation=30, ha='right', fontsize=8)
+
+# Legend positioning outside active chart window
+legend = ax.legend(loc='upper left', fontsize=8, framealpha=0.95, edgecolor='#cccccc', facecolor='white', bbox_to_anchor=(1.02, 1))
+
+# Unpack markdown bold triggers within legend components
+for text in legend.get_texts():
+    label_text = text.get_text()
+    if '**' in label_text:
+        label_text = label_text.replace('**', '')
+        text.set_text(label_text)
+        text.set_weight('bold')
+
+# Desaturate axis borders
+for edge in ['top', 'right']: ax.spines[edge].set_visible(False)
+for edge in ['left', 'bottom']: ax.spines[edge].set_color('#cccccc')
+ax.tick_params(colors='#555555', labelsize=9)
+
+plt.tight_layout()
+chart_filename = 'fear_and_greed_chart.png'
+plt.savefig(chart_filename, dpi=130, bbox_inches='tight', facecolor='white')
+plt.close()
+print("[INFO] Optimized chart saved successfully.")
+
+# --- 4. Package and Dispatch Email Notifications ---
+MAIL_USERNAME = os.environ.get("MAIL_USERNAME")
+MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD")
+TARGET_EMAIL = os.environ.get("TARGET_EMAIL")
+
+if not all([MAIL_USERNAME, MAIL_PASSWORD, TARGET_EMAIL]):
+    print("[WARNING] Email credential environment keys missing. Exiting gracefully without dispatch.")
+    sys.exit(0)
+
+print(f"[INFO] Formatting email transmission context to {TARGET_EMAIL}...")
+msg = MIMEMultipart('related')
+msg['Subject'] = f"Daily Market Sentiment Report: {int(overall_score)} ({overall_rating})"
+msg['From'] = MAIL_USERNAME
+msg['To'] = TARGET_EMAIL
+
+# HTML body structure with embedded asset reference tags
+html_content = f"""
+<html>
+  <body style="font-family: Arial, sans-serif; color: #333333; line-height: 1.6;">
+    <h2 style="color: #222222; margin-bottom: 5px;">Fear & Greed Market Index Update</h2>
+    <p style="font-size: 11px; color: #888888; margin-top: 0;">Evaluation Timestamp: {timestamp_str}</p>
+    <hr style="border: 0; border-top: 1px solid #eeeeee; margin: 20px 0;" />
+    
+    <p style="font-size: 16px;">
+      Current Market Sentiment Value: 
+      <strong style="font-size: 18px; color: #111111;">{int(overall_score)}</strong> 
+      (<span style="font-weight: bold; color: #555555;">{overall_rating}</span>)
+    </p>
+    
+    <div style="margin: 25px 0;">
+      <img src="cid:sentiment_chart_stream" alt="Fear and Greed Component Analysis Plot" style="max-width: 100%; height: auto; border: 1px solid #e0e0e0; border-radius: 4px;" />
+    </div>
+    
+    <p style="font-size: 12px; color: #aaaaaa; margin-top: 30px;">
+      This email was generated automatically via centralized repository pipelines. Data source courtesy of CNN Business Market Metrics.
+    </p>
+  </body>
+</html>
+"""
+
+msg.attach(MIMEText(html_content, 'html'))
+
+# Read and attach chart image file inline
+try:
+    with open(chart_filename, 'rb') as img_file:
+        img_data = img_file.read()
+    
+    email_image = MIMEImage(img_data)
+    email_image.add_header('Content-ID', '<sentiment_chart_stream>')
+    email_image.add_header('Content-Disposition', 'inline', filename=chart_filename)
+    msg.attach(email_image)
+    
+    # Establish server connection via Gmail SMTP relays
+    print("[INFO] Connecting to outbound mail servers...")
+    with smtplib.SMTP("smtp.gmail.com", 587) as server:
+        server.starttls()
+        server.login(MAIL_USERNAME, MAIL_PASSWORD)
+        server.sendmail(MAIL_USERNAME, TARGET_EMAIL, msg.as_string())
+        
+    print("[SUCCESS] Automated sentiment visual delivery run complete.")
+except Exception as mail_error:
+    print(f"[ERROR] Email transmission processing aborted: {mail_error}")
