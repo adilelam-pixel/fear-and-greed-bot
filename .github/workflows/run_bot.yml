@@ -2,8 +2,9 @@ name: Daily Fear and Greed Tracker
 
 on:
   schedule:
-    # Runs everyday at 21:00 UTC (4 PM EST / 5 PM EDT - right around market close)
-    - cron: '0 21 * * *'
+    # Test schedule: runs at 07:20 UTC (3 minutes from now at 07:17 UTC)
+    # Once verified working, change to: 0 21 * * * (21:00 UTC / 4 PM EST / 5 PM EDT)
+    - cron: '23 07 * * *'
   workflow_dispatch: # Allows you to manually trigger it anytime
 
 env:
