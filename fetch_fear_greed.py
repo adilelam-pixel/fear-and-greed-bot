@@ -43,12 +43,12 @@ for attempt in range(max_retries):
         response.raise_for_status()
         data = response.json()
         
-        # Isolate active master indices
+        # Isolate active master indices and enforce exactly 2 decimal places
         fng_now = data.get("fear_and_greed", {})
-        overall_score = fng_now.get("score", 50)
+        overall_score = round(float(fng_now.get("score", 50.0)), 2)
         overall_rating = str(fng_now.get("rating", "NEUTRAL")).upper()
         
-        print(f"[SUCCESS] Collected Core Index: {int(overall_score)} ({overall_rating})")
+        print(f"[SUCCESS] Collected Core Index: {overall_score:.2f} ({overall_rating})")
         break  # Connection successful! Break out of loop.
         
     except Exception as e:
@@ -74,8 +74,8 @@ new_row = {
 # Parse sub-components out of the active JSON contract
 for api_key, csv_column_name in COMPONENTS.items():
     comp_block = data.get(api_key, {})
-    score_val = comp_block.get("score", 50)
-    new_row[csv_column_name] = score_val if score_val is not None else 50
+    score_val = comp_block.get("score", 50.0)
+    new_row[csv_column_name] = round(float(score_val), 2) if score_val is not None else 50.0
 
 # Load existing log tracking database or create a new one if missing
 if os.path.exists(csv_filename):
@@ -136,8 +136,8 @@ ax.plot(
     label='**Overall Index**'
 )
         
-# Layout decorations
-ax.set_title(f'Fear & Greed Index: {int(overall_score)} ({overall_rating})', fontsize=13, fontweight='bold', color='#222222', pad=15, loc='left')
+# Layout decorations with 2-decimal formatting
+ax.set_title(f'Fear & Greed Index: {overall_score:.2f} ({overall_rating})', fontsize=13, fontweight='bold', color='#222222', pad=15, loc='left')
 ax.set_ylabel('Score Scale', fontsize=9, color='#555555')
 ax.set_ylim(-5, 105)
 ax.grid(True, linestyle='--', linewidth=0.5, color='#e5e5e5')
@@ -180,11 +180,11 @@ if not all([MAIL_USERNAME, MAIL_PASSWORD, TARGET_EMAIL]):
 
 print(f"[INFO] Formatting email transmission context to {TARGET_EMAIL}...")
 msg = MIMEMultipart('related')
-msg['Subject'] = f"Daily Market Sentiment Report: {int(overall_score)} ({overall_rating})"
+msg['Subject'] = f"Daily Market Sentiment Report: {overall_score:.2f} ({overall_rating})"
 msg['From'] = MAIL_USERNAME
 msg['To'] = TARGET_EMAIL
 
-# HTML body structure with embedded asset reference tags
+# HTML body structure with embedded asset reference tags and 2-decimal score presentation
 html_content = f"""
 <html>
   <body style="font-family: Arial, sans-serif; color: #333333; line-height: 1.6;">
@@ -194,7 +194,7 @@ html_content = f"""
     
     <p style="font-size: 16px;">
       Current Market Sentiment Value: 
-      <strong style="font-size: 18px; color: #111111;">{int(overall_score)}</strong> 
+      <strong style="font-size: 18px; color: #111111;">{overall_score:.2f}</strong> 
       (<span style="font-weight: bold; color: #555555;">{overall_rating}</span>)
     </p>
     
