@@ -2,9 +2,12 @@ name: Daily Fear and Greed Tracker
 
 on:
   schedule:
-    # 09:55 UTC turns into 11:55 AM French Time today
-    - cron: '55 09 * * *'
-  workflow_dispatch:
+    # Your target time: 21:00 UTC (23:00 French Summer Time)
+    - cron: '0 21 * * *'
+  workflow_dispatch: 
+  push:
+    branches:
+      - main  # Forces GitHub to evaluate the workflow on every save
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
