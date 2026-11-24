@@ -181,102 +181,142 @@ print(
     f"Total rows: {len(df_history)}"
 )
 
-# --- 3. Generate Clean High-Contrast Visual Chart ---
-print("[INFO] Generating optimized high-contrast chart...")
+# --- 3. Generate Full-History Chart ---
+print("[INFO] Generating full-history Fear & Greed chart...")
+
 df = pd.read_csv(csv_filename)
 df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
-df = df.dropna(subset=["Timestamp"])
-df_recent = df.tail(30)  # Focus on trailing 30 evaluations to preserve detail
+df = df.dropna(subset=["Timestamp"]).sort_values("Timestamp")
 
-# Build canvas with flat white backdrop
-fig, ax = plt.subplots(figsize=(13, 6), facecolor="white")
-ax.set_facecolor("white")
+if df.empty:
+    print("[FATAL ERROR] CSV contains no valid timestamps; cannot generate chart.")
+    sys.exit(1)
 
-# Explicit color mapping palette for distinct identification
+# Keep every available observation: do not truncate to the last 30 rows.
+df_all = df.copy()
+
+# Two dedicated panels: headline index on top, seven components below.
+fig, (ax_overall, ax_components) = plt.subplots(
+    2,
+    1,
+    figsize=(15, 10),
+    sharex=True,
+    gridspec_kw={"height_ratios": [1, 1.35]},
+    facecolor="white"
+)
+fig.patch.set_facecolor("white")
+ax_overall.set_facecolor("white")
+ax_components.set_facecolor("white")
+
+# Consistent component palette.
 COMPONENT_COLORS = {
-    "Market Momentum": "#1f77b4",       # Electric Blue
-    "Stock Price Strength": "#ff7f0e",   # Safety Orange
-    "Stock Price Breadth": "#2ca02c",    # Forest Green
-    "Put and Call Options": "#d62728",   # Crimson Red
-    "Market Volatility": "#9467bd",     # Deep Purple
-    "Junk Bond Demand": "#8c564b",      # Cocoa Brown
-    "Safe Haven Demand": "#e377c2"      # Vibrant Pink
+    "Market Momentum": "#1f77b4",
+    "Stock Price Strength": "#ff7f0e",
+    "Stock Price Breadth": "#2ca02c",
+    "Put and Call Options": "#d62728",
+    "Market Volatility": "#9467bd",
+    "Junk Bond Demand": "#8c564b",
+    "Safe Haven Demand": "#e377c2"
 }
 
-# Plot sub-component tracks. Missing historical values remain gaps in the lines.
-for col in COMPONENTS.values():
-    if col in df_recent.columns:
-        component_values = pd.to_numeric(df_recent[col], errors="coerce")
-        label = f"**{col}**" if col in ["Market Momentum", "Market Volatility"] else col
-        color = COMPONENT_COLORS.get(col, "#7f7f7f")
-
-        ax.plot(
-            df_recent["Timestamp"],
-            component_values,
-            alpha=0.5,
-            linewidth=1.2,
-            linestyle="-",
-            color=color,
-            label=label
-        )
-
-# Plot overall master index line
-overall_values = pd.to_numeric(df_recent["Overall Score"], errors="coerce")
-ax.plot(
-    df_recent["Timestamp"],
+# Panel 1: complete historical headline index.
+overall_values = pd.to_numeric(df_all["Overall Score"], errors="coerce")
+ax_overall.plot(
+    df_all["Timestamp"],
     overall_values,
     color="#111111",
-    linewidth=3.5,
+    linewidth=1.8,
     marker="o",
-    markersize=5,
-    label="**Overall Index**"
+    markersize=2.5,
+    label="Overall Index"
 )
-
-# Layout decorations
-ax.set_title(
-    f"Fear & Greed Index: {overall_score:.2f} ({overall_rating})",
-    fontsize=13,
+ax_overall.set_title(
+    f"Overall Fear & Greed Index — {len(df_all)} observations",
+    fontsize=12,
     fontweight="bold",
     color="#222222",
-    pad=15,
-    loc="left"
+    loc="left",
+    pad=10
 )
-ax.set_ylabel("Score Scale", fontsize=9, color="#555555")
-ax.set_ylim(-5, 105)
-ax.grid(True, linestyle="--", linewidth=0.5, color="#e5e5e5")
-ax.xaxis.set_major_locator(mdates.AutoDateLocator(minticks=4, maxticks=8))
-ax.xaxis.set_major_formatter(mdates.DateFormatter("%d/%m/%Y\n%H:%M"))
-plt.xticks(rotation=30, ha="right", fontsize=8)
+ax_overall.set_ylabel("Overall score", fontsize=9, color="#555555")
+ax_overall.set_ylim(-5, 105)
+ax_overall.grid(True, linestyle="--", linewidth=0.5, color="#e5e5e5")
+ax_overall.legend(loc="upper left", fontsize=8, framealpha=0.95)
 
-# Legend positioning outside active chart window
-legend = ax.legend(
+# Panel 2: complete available history for each component.
+# CNN backfilled rows contain no normalized historical component scores;
+# pandas NaN values intentionally create visible gaps rather than fabricated lines.
+for col in COMPONENTS.values():
+    if col not in df_all.columns:
+        continue
+
+    component_values = pd.to_numeric(df_all[col], errors="coerce")
+    ax_components.plot(
+        df_all["Timestamp"],
+        component_values,
+        alpha=0.85,
+        linewidth=1.15,
+        linestyle="-",
+        color=COMPONENT_COLORS.get(col, "#7f7f7f"),
+        label=col
+    )
+
+ax_components.set_title(
+    "Fear & Greed — Seven Components (all available observations)",
+    fontsize=12,
+    fontweight="bold",
+    color="#222222",
+    loc="left",
+    pad=10
+)
+ax_components.set_ylabel("Component score", fontsize=9, color="#555555")
+ax_components.set_ylim(-5, 105)
+ax_components.set_xlabel("Date", fontsize=9, color="#555555")
+ax_components.grid(True, linestyle="--", linewidth=0.5, color="#e5e5e5")
+ax_components.legend(
     loc="upper left",
+    bbox_to_anchor=(1.01, 1),
     fontsize=8,
     framealpha=0.95,
     edgecolor="#cccccc",
-    facecolor="white",
-    bbox_to_anchor=(1.02, 1)
+    facecolor="white"
 )
 
-# Unpack markdown bold triggers within legend components
-for legend_text in legend.get_texts():
-    label_text = legend_text.get_text()
-    if "**" in label_text:
-        legend_text.set_text(label_text.replace("**", ""))
-        legend_text.set_weight("bold")
+# Date axis spans the first through the last valid observation in the CSV.
+ax_components.xaxis.set_major_locator(
+    mdates.AutoDateLocator(minticks=6, maxticks=12)
+)
+ax_components.xaxis.set_major_formatter(
+    mdates.DateFormatter("%d/%m/%Y")
+)
+plt.setp(ax_components.get_xticklabels(), rotation=30, ha="right", fontsize=8)
 
-# Desaturate axis borders
-for edge in ["top", "right"]:
-    ax.spines[edge].set_visible(False)
-for edge in ["left", "bottom"]:
-    ax.spines[edge].set_color("#cccccc")
-ax.tick_params(colors="#555555", labelsize=9)
+for axis in (ax_overall, ax_components):
+    for edge in ["top", "right"]:
+        axis.spines[edge].set_visible(False)
+    for edge in ["left", "bottom"]:
+        axis.spines[edge].set_color("#cccccc")
+    axis.tick_params(colors="#555555", labelsize=8)
 
-plt.tight_layout()
+fig.suptitle(
+    f"Fear & Greed Index: {overall_score:.2f} ({overall_rating})",
+    fontsize=15,
+    fontweight="bold",
+    color="#222222",
+    x=0.08,
+    ha="left",
+    y=0.99
+)
+fig.tight_layout(rect=[0, 0, 0.83, 0.96])
+
 chart_filename = "fear_and_greed_chart.png"
-plt.savefig(chart_filename, dpi=130, bbox_inches="tight", facecolor="white")
-plt.close()
-print("[INFO] Optimized chart saved successfully.")
+plt.savefig(chart_filename, dpi=150, bbox_inches="tight", facecolor="white")
+plt.close(fig)
+
+print(
+    f"[INFO] Full-history chart saved successfully: {len(df_all)} observations, "
+    f"{df_all['Timestamp'].min()} to {df_all['Timestamp'].max()}."
+)
 
 # --- 4. Package and Dispatch Email Notifications ---
 MAIL_USERNAME = os.environ.get("MAIL_USERNAME")
